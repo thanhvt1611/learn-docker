@@ -742,40 +742,410 @@ COPY --from=builder /app/dist ./dist
 
 ### Bài 1: Simple Web Server
 
-Tạo Dockerfile cho static website với nginx:
+**Mục tiêu:** Tạo Dockerfile cho static website với nginx
 
-```dockerfile
-# Viết Dockerfile để:
-# 1. Sử dụng nginx:alpine
-# 2. Copy HTML files vào /usr/share/nginx/html
-# 3. Expose port 80
+**Yêu cầu:**
+1. Sử dụng nginx:alpine
+2. Copy HTML files vào /usr/share/nginx/html
+3. Expose port 80
+4. Build image
+5. Run container và test
+
+**Hướng dẫn chi tiết:**
+
+```bash
+# Bước 1: Tạo thư mục project
+mkdir my-website
+cd my-website
+
+# Bước 2: Tạo file HTML
+cat > index.html << 'EOF'
+<!DOCTYPE html>
+<html>
+<head>
+    <title>My Docker Website</title>
+    <style>
+        body { font-family: Arial; text-align: center; margin-top: 50px; }
+        h1 { color: #333; }
+    </style>
+</head>
+<body>
+    <h1>Welcome to My Docker Website!</h1>
+    <p>This is running inside a Docker container.</p>
+</body>
+</html>
+EOF
+
+# Bước 3: Tạo Dockerfile
+cat > Dockerfile << 'EOF'
+# Sử dụng nginx:alpine làm base image
+FROM nginx:alpine
+
+# Copy HTML files vào container
+COPY index.html /usr/share/nginx/html/
+
+# Expose port 80
+EXPOSE 80
+
+# CMD mặc định (nginx sẽ start tự động)
+CMD ["nginx", "-g", "daemon off;"]
+EOF
+
+# Bước 4: Build image
+docker build -t my-website:1.0 .
+# Output:
+# Sending build context to Docker daemon  2.048kB
+# Step 1/4 : FROM nginx:alpine
+# ...
+# Successfully tagged my-website:1.0
+
+# Bước 5: Verify image được tạo
+docker images | grep my-website
+# Output: my-website  1.0  ...
+
+# Bước 6: Run container
+docker run -d -p 8080:80 --name my-web my-website:1.0
+# Output: container ID
+
+# Bước 7: Test website
+curl http://localhost:8080
+# Output: HTML content
+
+# Hoặc mở browser: http://localhost:8080
+
+# Bước 8: Xem logs
+docker logs my-web
+# Output: Nginx logs
+
+# Bước 9: Stop và remove
+docker stop my-web
+docker rm my-web
 ```
+
+**Kiểm tra kết quả:**
+- ✅ Dockerfile được tạo đúng
+- ✅ Image build thành công
+- ✅ Container chạy và accessible
+- ✅ HTML content hiển thị đúng
+
+---
 
 ### Bài 2: Node.js API
 
-Tạo Dockerfile cho Node.js REST API:
+**Mục tiêu:** Tạo Dockerfile cho Node.js REST API
 
-```dockerfile
-# Viết Dockerfile để:
-# 1. Sử dụng node:18-alpine
-# 2. Install dependencies
-# 3. Copy source code
-# 4. Expose port 3000
-# 5. Run với non-root user
+**Yêu cầu:**
+1. Sử dụng node:18-alpine
+2. Install dependencies
+3. Copy source code
+4. Expose port 3000
+5. Run với non-root user
+6. Build image
+7. Run container và test
+
+**Hướng dẫn chi tiết:**
+
+```bash
+# Bước 1: Tạo thư mục project
+mkdir my-api
+cd my-api
+
+# Bước 2: Tạo package.json
+cat > package.json << 'EOF'
+{
+  "name": "my-api",
+  "version": "1.0.0",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
+EOF
+
+# Bước 3: Tạo app.js
+cat > app.js << 'EOF'
+const express = require('express');
+const app = express();
+
+app.get('/', (req, res) => {
+  res.json({ message: 'Hello from Docker!' });
+});
+
+app.get('/health', (req, res) => {
+  res.json({ status: 'healthy' });
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
+EOF
+
+# Bước 4: Tạo Dockerfile
+cat > Dockerfile << 'EOF'
+# Sử dụng node:18-alpine
+FROM node:18-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm ci --only=production
+
+# Copy source code
+COPY . .
+
+# Tạo non-root user
+RUN addgroup -g 1001 appgroup && \
+    adduser -D -u 1001 -G appgroup appuser
+
+# Switch to non-root user
+USER appuser
+
+# Expose port
+EXPOSE 3000
+
+# Start app
+CMD ["npm", "start"]
+EOF
+
+# Bước 5: Build image
+docker build -t my-api:1.0 .
+# Output: Successfully tagged my-api:1.0
+
+# Bước 6: Verify image
+docker images | grep my-api
+
+# Bước 7: Run container
+docker run -d -p 3000:3000 --name my-api-container my-api:1.0
+# Output: container ID
+
+# Bước 8: Xem logs
+docker logs my-api-container
+# Output: Server running on port 3000
+
+# Bước 9: Test API
+curl http://localhost:3000
+# Output: {"message":"Hello from Docker!"}
+
+curl http://localhost:3000/health
+# Output: {"status":"healthy"}
+
+# Bước 10: Verify non-root user
+docker exec my-api-container whoami
+# Output: appuser (không phải root!)
+
+# Bước 11: Inspect image
+docker inspect my-api:1.0 | grep -A 5 "User"
+# Output: "User": "appuser"
+
+# Bước 12: Stop và remove
+docker stop my-api-container
+docker rm my-api-container
 ```
+
+**Kiểm tra kết quả:**
+- ✅ Dockerfile được tạo đúng
+- ✅ Image build thành công
+- ✅ Container chạy
+- ✅ API endpoints hoạt động
+- ✅ Non-root user được sử dụng
+- ✅ Dependencies được install
+
+---
 
 ### Bài 3: Multi-Stage Build
 
-Tạo Dockerfile với multi-stage build cho React app:
+**Mục tiêu:** Tạo Dockerfile với multi-stage build cho React app
 
-```dockerfile
-# Stage 1: Build
-# - Sử dụng node:18
-# - npm install và npm run build
+**Yêu cầu:**
+1. Stage 1: Build React app
+2. Stage 2: Serve với Nginx
+3. So sánh image size
+4. Build image
+5. Run container và test
 
-# Stage 2: Production
-# - Sử dụng nginx:alpine
-# - Copy build files từ stage 1
+**Hướng dẫn chi tiết:**
+
+```bash
+# Bước 1: Tạo thư mục project
+mkdir my-react-app
+cd my-react-app
+
+# Bước 2: Tạo package.json
+cat > package.json << 'EOF'
+{
+  "name": "my-react-app",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-scripts": "5.0.1"
+  },
+  "scripts": {
+    "build": "react-scripts build",
+    "start": "react-scripts start"
+  },
+  "eslintConfig": {
+    "extends": ["react-app"]
+  },
+  "browserslist": {
+    "production": [">0.2%", "not dead", "not op_mini all"],
+    "development": ["last 1 chrome version"]
+  }
+}
+EOF
+
+# Bước 3: Tạo public/index.html
+mkdir -p public
+cat > public/index.html << 'EOF'
+<!DOCTYPE html>
+<html>
+<head>
+    <title>My React App</title>
+</head>
+<body>
+    <div id="root"></div>
+</body>
+</html>
+EOF
+
+# Bước 4: Tạo src/index.js
+mkdir -p src
+cat > src/index.js << 'EOF'
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+
+const App = () => (
+  <div style={{ textAlign: 'center', marginTop: '50px' }}>
+    <h1>Hello from React in Docker!</h1>
+    <p>Multi-stage build example</p>
+  </div>
+);
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+EOF
+
+# Bước 5: Tạo .dockerignore
+cat > .dockerignore << 'EOF'
+node_modules
+npm-debug.log
+build
+.git
+.env
+EOF
+
+# Bước 6: Tạo Dockerfile với multi-stage build
+cat > Dockerfile << 'EOF'
+# ===== Stage 1: Build =====
+FROM node:18-alpine AS builder
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm ci
+
+# Copy source code
+COPY . .
+
+# Build app
+RUN npm run build
+
+# ===== Stage 2: Production =====
+FROM nginx:alpine
+
+# Copy built files từ stage 1
+COPY --from=builder /app/build /usr/share/nginx/html
+
+# Copy nginx config (optional)
+RUN echo 'server { listen 80; location / { root /usr/share/nginx/html; try_files $uri /index.html; } }' \
+    > /etc/nginx/conf.d/default.conf
+
+# Expose port
+EXPOSE 80
+
+# Start nginx
+CMD ["nginx", "-g", "daemon off;"]
+EOF
+
+# Bước 7: Build image
+docker build -t my-react-app:1.0 .
+# Output: Successfully tagged my-react-app:1.0
+# Lưu ý: Build sẽ mất vài phút vì cần install dependencies
+
+# Bước 8: Xem image size
+docker images | grep my-react-app
+# Output: my-react-app  1.0  ...  (khoảng 50-100MB)
+
+# So sánh với single-stage build (nếu có):
+# Single-stage: ~500MB (chứa node_modules)
+# Multi-stage: ~50MB (chỉ chứa build output)
+
+# Bước 9: Run container
+docker run -d -p 8080:80 --name my-react my-react-app:1.0
+# Output: container ID
+
+# Bước 10: Test app
+curl http://localhost:8080
+# Output: HTML content
+
+# Hoặc mở browser: http://localhost:8080
+
+# Bước 11: Xem layers của image
+docker history my-react-app:1.0
+# Output: Sẽ thấy 2 stages
+
+# Bước 12: Inspect image
+docker inspect my-react-app:1.0 | grep -A 10 "RootFS"
+
+# Bước 13: Stop và remove
+docker stop my-react
+docker rm my-react
+```
+
+**Kiểm tra kết quả:**
+- ✅ Dockerfile multi-stage được tạo đúng
+- ✅ Image build thành công
+- ✅ Image size nhỏ (chỉ chứa build output)
+- ✅ Container chạy
+- ✅ App accessible
+- ✅ Layers được tối ưu
+
+**Bonus - So sánh Single-stage vs Multi-stage:**
+
+```bash
+# Tạo Dockerfile single-stage
+cat > Dockerfile.single << 'EOF'
+FROM node:18-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+EXPOSE 80
+CMD ["npm", "start"]
+EOF
+
+# Build single-stage
+docker build -f Dockerfile.single -t my-react-app:single .
+
+# So sánh size
+docker images | grep my-react-app
+# my-react-app:1.0      (multi-stage)  ~50MB
+# my-react-app:single   (single-stage) ~500MB
+
+# Multi-stage nhỏ hơn 10 lần!
 ```
 
 ---

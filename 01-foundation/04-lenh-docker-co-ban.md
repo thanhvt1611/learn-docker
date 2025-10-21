@@ -628,41 +628,353 @@ docker system prune      # Cleanup tất cả
 
 ## 🎓 Bài Tập Thực Hành
 
-### Bài 1: Cơ Bản
+### Bài 1: Cơ Bản - Nginx Web Server
+
+**Mục tiêu:** Làm quen với các lệnh Docker cơ bản
+
+**Yêu cầu:**
+1. Pull image nginx
+2. Chạy container với port 8080 (host) → 80 (container)
+3. Kiểm tra container đang chạy
+4. Xem logs
+5. Stop và remove container
+
+**Hướng dẫn chi tiết:**
 
 ```bash
-# 1. Pull image nginx
-# 2. Chạy container với port 8080
-# 3. Kiểm tra container đang chạy
-# 4. Xem logs
-# 5. Stop và remove container
+# Bước 1: Pull image nginx
+docker pull nginx:latest
+# Output: Downloaded newer image for nginx:latest
+
+# Bước 2: Chạy container
+docker run -d -p 8080:80 --name my-nginx nginx:latest
+# -d: Chạy ở background (detached mode)
+# -p 8080:80: Map port 8080 (host) → 80 (container)
+# --name my-nginx: Đặt tên container
+# Output: a1b2c3d4e5f6... (container ID)
+
+# Bước 3: Kiểm tra container đang chạy
+docker ps
+# Output:
+# CONTAINER ID   IMAGE     COMMAND                  CREATED         STATUS         PORTS                  NAMES
+# a1b2c3d4e5f6   nginx     "/docker-entrypoint.…"   10 seconds ago  Up 9 seconds   0.0.0.0:8080->80/tcp   my-nginx
+
+# Bước 4: Xem logs
+docker logs my-nginx
+# Output: Nginx startup logs
+
+# Bước 4b: Follow logs (real-time)
+docker logs -f my-nginx
+# Ctrl+C để thoát
+
+# Bước 5: Test web server
+curl http://localhost:8080
+# Hoặc mở browser: http://localhost:8080
+# Output: Nginx welcome page
+
+# Bước 6: Stop container
+docker stop my-nginx
+# Output: my-nginx
+
+# Bước 7: Verify container đã stop
+docker ps
+# Output: (trống - không có container chạy)
+
+# Bước 8: Xem tất cả containers (kể cả stopped)
+docker ps -a
+# Output: my-nginx sẽ có status "Exited"
+
+# Bước 9: Remove container
+docker rm my-nginx
+# Output: my-nginx
+
+# Bước 10: Verify container đã xóa
+docker ps -a
+# Output: (my-nginx không còn)
 ```
 
-### Bài 2: Trung Bình
+**Kiểm tra kết quả:**
+- ✅ Container chạy thành công
+- ✅ Port mapping hoạt động (truy cập được http://localhost:8080)
+- ✅ Logs hiển thị đúng
+- ✅ Container được stop và remove thành công
+
+---
+
+### Bài 2: Trung Bình - MySQL Database
+
+**Mục tiêu:** Làm việc với database container, environment variables, và volumes
+
+**Yêu cầu:**
+1. Chạy MySQL container với:
+   - Password: mypassword
+   - Database: testdb
+   - Port: 3306
+   - Volume: mysql-data
+2. Connect vào MySQL
+3. Tạo table và insert data
+4. Backup database
+5. Stop container nhưng giữ data
+
+**Hướng dẫn chi tiết:**
 
 ```bash
-# 1. Chạy MySQL container với:
-#    - Password: mypassword
-#    - Database: testdb
-#    - Port: 3306
-#    - Volume: mysql-data
-# 2. Connect vào MySQL
-# 3. Tạo table và insert data
-# 4. Backup database
-# 5. Stop container nhưng giữ data
+# Bước 1: Tạo volume cho database
+docker volume create mysql-data
+# Output: mysql-data
+
+# Bước 2: Chạy MySQL container
+docker run -d \
+  --name my-mysql \
+  -e MYSQL_ROOT_PASSWORD=mypassword \
+  -e MYSQL_DATABASE=testdb \
+  -p 3306:3306 \
+  -v mysql-data:/var/lib/mysql \
+  mysql:8.0
+# -e: Set environment variables
+# -v: Mount volume
+# Output: container ID
+
+# Bước 3: Kiểm tra container chạy
+docker ps
+# Verify my-mysql đang chạy
+
+# Bước 4: Xem logs để confirm MySQL started
+docker logs my-mysql
+# Tìm dòng: "ready for connections"
+
+# Bước 5: Connect vào MySQL
+docker exec -it my-mysql mysql -u root -p
+# Nhập password: mypassword
+# Bây giờ bạn ở trong MySQL shell
+
+# Bước 6: Tạo table (trong MySQL shell)
+USE testdb;
+CREATE TABLE users (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100),
+  email VARCHAR(100)
+);
+
+# Bước 7: Insert data
+INSERT INTO users (name, email) VALUES ('John Doe', 'john@example.com');
+INSERT INTO users (name, email) VALUES ('Jane Smith', 'jane@example.com');
+
+# Bước 8: Verify data
+SELECT * FROM users;
+# Output:
+# +----+------------+-------------------+
+# | id | name       | email             |
+# +----+------------+-------------------+
+# |  1 | John Doe   | john@example.com  |
+# |  2 | Jane Smith | jane@example.com  |
+# +----+------------+-------------------+
+
+# Bước 9: Thoát MySQL shell
+exit
+
+# Bước 10: Backup database (từ host terminal)
+docker exec my-mysql mysqldump -u root -pmypassword testdb > backup.sql
+# Output: backup.sql file được tạo
+
+# Bước 11: Verify backup
+cat backup.sql | head -20
+# Bạn sẽ thấy SQL dump content
+
+# Bước 12: Stop container (data vẫn giữ trong volume)
+docker stop my-mysql
+# Output: my-mysql
+
+# Bước 13: Verify container stopped
+docker ps
+# Output: (trống)
+
+# Bước 14: Verify volume vẫn tồn tại
+docker volume ls
+# Output: mysql-data vẫn có
+
+# Bước 15: Start lại container
+docker start my-mysql
+
+# Bước 16: Verify data vẫn còn
+docker exec -it my-mysql mysql -u root -pmypassword testdb -e "SELECT * FROM users;"
+# Output: Data vẫn còn!
 ```
 
-### Bài 3: Nâng Cao
+**Kiểm tra kết quả:**
+- ✅ MySQL container chạy thành công
+- ✅ Database và table được tạo
+- ✅ Data được insert thành công
+- ✅ Backup file được tạo
+- ✅ Data persist sau khi stop/start container
+
+---
+
+### Bài 3: Nâng Cao - Multi-Container Network
+
+**Mục tiêu:** Kết nối nhiều containers qua network
+
+**Yêu cầu:**
+1. Tạo custom network
+2. Chạy 3 containers:
+   - nginx (port 80)
+   - node app (port 3000)
+   - redis (port 6379)
+3. Connect chúng vào cùng network
+4. Test kết nối giữa containers
+5. Monitor resource usage
+6. Cleanup tất cả
+
+**Hướng dẫn chi tiết:**
 
 ```bash
-# 1. Chạy 3 containers:
-#    - nginx (port 80)
-#    - node app (port 3000)
-#    - redis (port 6379)
-# 2. Connect chúng vào cùng network
-# 3. Test kết nối giữa containers
-# 4. Monitor resource usage
-# 5. Cleanup tất cả
+# Bước 1: Tạo custom network
+docker network create myapp-network
+# Output: network ID
+
+# Bước 2: Verify network được tạo
+docker network ls
+# Output: myapp-network sẽ hiển thị
+
+# Bước 3: Chạy Redis container
+docker run -d \
+  --name redis \
+  --network myapp-network \
+  redis:alpine
+# Output: container ID
+
+# Bước 4: Chạy Node.js app container
+docker run -d \
+  --name node-app \
+  --network myapp-network \
+  -p 3000:3000 \
+  -e REDIS_HOST=redis \
+  -e REDIS_PORT=6379 \
+  node:18-alpine \
+  sh -c "npm install express redis && node -e \"
+    const express = require('express');
+    const redis = require('redis');
+    const app = express();
+    const client = redis.createClient({
+      host: process.env.REDIS_HOST,
+      port: process.env.REDIS_PORT
+    });
+    app.get('/', (req, res) => res.json({msg: 'Hello from Node!'}));
+    app.get('/redis', async (req, res) => {
+      await client.set('test', 'value');
+      const val = await client.get('test');
+      res.json({redis: val});
+    });
+    app.listen(3000, () => console.log('Server running on 3000'));
+  \""
+# Output: container ID
+
+# Bước 5: Chạy Nginx container
+docker run -d \
+  --name nginx \
+  --network myapp-network \
+  -p 80:80 \
+  nginx:alpine
+# Output: container ID
+
+# Bước 6: Verify tất cả containers chạy
+docker ps
+# Output: 3 containers (redis, node-app, nginx)
+
+# Bước 7: Inspect network để xem containers
+docker network inspect myapp-network
+# Output: Sẽ thấy 3 containers kết nối
+
+# Bước 8: Test kết nối từ node-app đến redis
+docker exec node-app sh -c "ping -c 1 redis"
+# Output: PING redis ... (thành công)
+
+# Bước 9: Test Node.js app
+curl http://localhost:3000
+# Output: {"msg":"Hello from Node!"}
+
+# Bước 10: Test Redis connection
+curl http://localhost:3000/redis
+# Output: {"redis":"value"}
+
+# Bước 11: Monitor resource usage
+docker stats
+# Output: CPU, Memory, Network I/O của mỗi container
+# Ctrl+C để thoát
+
+# Bước 12: Xem logs của node-app
+docker logs node-app
+# Output: Server logs
+
+# Bước 13: Stop tất cả containers
+docker stop redis node-app nginx
+# Output: container names
+
+# Bước 14: Remove tất cả containers
+docker rm redis node-app nginx
+# Output: container names
+
+# Bước 15: Remove network
+docker network rm myapp-network
+# Output: myapp-network
+
+# Bước 16: Verify cleanup
+docker ps -a
+docker network ls
+# Output: Không có containers/networks
+```
+
+**Kiểm tra kết quả:**
+- ✅ Custom network được tạo
+- ✅ 3 containers chạy trên cùng network
+- ✅ Containers có thể kết nối với nhau qua hostname
+- ✅ Port mapping hoạt động
+- ✅ Resource monitoring hoạt động
+- ✅ Cleanup thành công
+
+**Bonus - Nâng cao hơn:**
+
+```bash
+# Sử dụng docker-compose thay vì manual commands
+cat > docker-compose.yml << 'EOF'
+version: '3.8'
+
+services:
+  redis:
+    image: redis:alpine
+    networks:
+      - myapp-network
+
+  node-app:
+    image: node:18-alpine
+    ports:
+      - "3000:3000"
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    networks:
+      - myapp-network
+    depends_on:
+      - redis
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    networks:
+      - myapp-network
+    depends_on:
+      - node-app
+
+networks:
+  myapp-network:
+EOF
+
+# Chạy tất cả
+docker compose up -d
+
+# Cleanup
+docker compose down
 ```
 
 ---
