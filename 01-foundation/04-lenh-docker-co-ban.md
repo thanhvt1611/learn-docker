@@ -843,30 +843,83 @@ docker run -d \
   redis:alpine
 # Output: container ID
 
-# Bước 4: Chạy Node.js app container
+# Bước 4a: Tạo folder project
+mkdir my-node-app
+cd my-node-app
+# Output: Folder my-node-app được tạo
+
+# Bước 4b: Tạo package.json
+npm init -y
+# Output: package.json được tạo
+
+# Bước 4c: Cài đặt dependencies
+npm install express redis
+# Output: node_modules được tạo, package-lock.json được cập nhật
+
+# Bước 4d: Tạo file index.js (Khuyến nghị - Sử dụng Redis URL)
+cat > index.js << 'EOF'
+const express = require('express');
+const redis = require('redis');
+const app = express();
+
+// Kết nối Redis sử dụng URL format
+// Format: redis://[hostname]:[port]
+const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+const client = redis.createClient({
+  url: redisUrl
+});
+
+// Xử lý lỗi Redis
+client.on('error', (err) => console.log('Redis Client Error', err));
+client.on('connect', () => console.log('Redis Client Connected'));
+
+app.get('/', (req, res) => {
+  res.json({msg: 'Hello from Node!'});
+});
+
+app.get('/redis', async (req, res) => {
+  try {
+    await client.set('test', 'value');
+    const val = await client.get('test');
+    res.json({redis: val});
+  } catch (err) {
+    res.status(500).json({error: err.message});
+  }
+});
+
+// Kết nối Redis khi app khởi động
+const startServer = async () => {
+  try {
+    await client.connect();
+    console.log('Connected to Redis at:', redisUrl);
+
+    app.listen(3000, () => {
+      console.log('Server running on 3000');
+    });
+  } catch (err) {
+    console.error('Failed to connect to Redis:', err);
+    process.exit(1);
+  }
+};
+
+startServer();
+EOF
+# Output: index.js được tạo
+
+# Bước 4e: Chạy Node.js app container với volume mount
 docker run -d \
   --name node-app \
   --network myapp-network \
   -p 3000:3000 \
-  -e REDIS_HOST=redis \
-  -e REDIS_PORT=6379 \
-  node:18-alpine \
-  sh -c "npm install express redis && node -e \"
-    const express = require('express');
-    const redis = require('redis');
-    const app = express();
-    const client = redis.createClient({
-      host: process.env.REDIS_HOST,
-      port: process.env.REDIS_PORT
-    });
-    app.get('/', (req, res) => res.json({msg: 'Hello from Node!'}));
-    app.get('/redis', async (req, res) => {
-      await client.set('test', 'value');
-      const val = await client.get('test');
-      res.json({redis: val});
-    });
-    app.listen(3000, () => console.log('Server running on 3000'));
-  \""
+  -e REDIS_URL=redis://redis:6379 \
+  -v $(pwd):/app \
+  -w /app \
+  node:latest \
+  node index.js
+# -e REDIS_URL=redis://redis:6379: Set Redis URL (redis là tên container Redis)
+# -v $(pwd):/app: Mount folder hiện tại vào /app trong container
+# -w /app: Set working directory là /app
+# node:latest: Sử dụng image Node.js mới nhất
 # Output: container ID
 
 # Bước 5: Chạy Nginx container
@@ -925,17 +978,48 @@ docker network ls
 ```
 
 **Kiểm tra kết quả:**
+- ✅ Folder project được tạo với package.json, index.js
+- ✅ Dependencies được cài đặt thành công
 - ✅ Custom network được tạo
 - ✅ 3 containers chạy trên cùng network
 - ✅ Containers có thể kết nối với nhau qua hostname
-- ✅ Port mapping hoạt động
+- ✅ Port mapping hoạt động (test: curl http://localhost:3000)
+- ✅ Volume mount hoạt động (code trên host được sử dụng trong container)
 - ✅ Resource monitoring hoạt động
 - ✅ Cleanup thành công
 
-**Bonus - Nâng cao hơn:**
+**Bonus - Nâng cao hơn - Sử dụng Dockerfile:**
 
 ```bash
-# Sử dụng docker-compose thay vì manual commands
+# Bước 1: Tạo Dockerfile trong folder my-node-app
+cat > Dockerfile << 'EOF'
+FROM node:latest
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+EXPOSE 3000
+CMD ["node", "index.js"]
+EOF
+
+# Bước 2: Build image
+docker build -t my-node-app .
+# Output: Successfully tagged my-node-app:latest
+
+# Bước 3: Chạy container từ image vừa build
+docker run -d \
+  --name node-app \
+  --network myapp-network \
+  -p 3000:3000 \
+  -e REDIS_URL=redis://redis:6379 \
+  my-node-app
+# Output: container ID
+```
+
+**Bonus - Nâng cao hơn - Sử dụng Docker Compose:**
+
+```bash
+# Bước 1: Tạo docker-compose.yml
 cat > docker-compose.yml << 'EOF'
 version: '3.8'
 
@@ -946,12 +1030,16 @@ services:
       - myapp-network
 
   node-app:
-    image: node:18-alpine
+    image: node:latest
     ports:
       - "3000:3000"
     environment:
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
+      REDIS_URL: redis://redis:6379
+    volumes:
+      - .:/app
+      - /app/node_modules
+    working_dir: /app
+    command: node index.js
     networks:
       - myapp-network
     depends_on:
@@ -970,11 +1058,16 @@ networks:
   myapp-network:
 EOF
 
-# Chạy tất cả
+# Bước 2: Chạy tất cả services
 docker compose up -d
+# Output: Creating redis, node-app, nginx...
 
-# Cleanup
+# Bước 3: Xem logs
+docker compose logs -f
+
+# Bước 4: Cleanup
 docker compose down
+# Output: Removing containers, networks...
 ```
 
 ---
